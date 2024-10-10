@@ -45,36 +45,44 @@ public class Server
 
             if (msg == "{}")
             {
-                var response = new Response
-                {
-                    Status = "missing method"
-                };
-                
-                var json = ToJson(response);
-                WriteToStream(stream, json);
+
+                sendResponse(stream, "missing method");
 
             } else
             {
-                var request = FromJson(msg);
+                Request request = FromJson(msg);
+                Console.WriteLine(request.Date);
                 if (request == null)
                 {
 
                 }
 
-                string[] validMethods = ["create", "read", "update", "delete", "echo"]; // we can only úse these methods
-                if (!validMethods.Contains(request.Method))
+                string[] validMethods = ["create", "read", "update", "delete", "echo"]; // we can only use these methods
+
+                // if illegal method, send appropriate response
+                if (!validMethods.Contains(request.Method)) { sendResponse(stream, "illegal method"); } 
+                else
                 {
-                    var response = new Response
-                    {
-                        Status = "illegal method"
-                    };
-                    var json = ToJson(response);
-                    WriteToStream(stream, json);
+                    // few checks if we have everything we need to proceed
+                    if (request.Body is null) { sendResponse(stream, "missing resource"); }
+                    if (request.Date == "{}") { sendResponse(stream, "missing date"); }
+
                 }
             }
 
         }
         catch { }
+    }
+
+    private void sendResponse(NetworkStream stream, string status)
+    {
+        var response = new Response
+        {
+            Status = status
+        };
+        Console.WriteLine(response.Status);
+        var json = ToJson(response);
+        WriteToStream(stream, json);
     }
 
     private string ReadFromStream(NetworkStream stream)
