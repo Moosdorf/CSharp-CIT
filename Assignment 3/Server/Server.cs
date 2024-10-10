@@ -45,13 +45,13 @@ public class Server
 
             if (msg == "{}")
             {
-
                 sendResponse(stream, "missing method");
+                sendResponse(stream, "missing date");
 
             } else
             {
                 Request request = FromJson(msg);
-                Console.WriteLine(request.Date);
+                Console.WriteLine(request.ToString());
                 if (request == null)
                 {
 
@@ -65,7 +65,10 @@ public class Server
                 {
                     // few checks if we have everything we need to proceed
                     if (request.Body is null) { sendResponse(stream, "missing resource"); }
-                    if (request.Date == "{}") { sendResponse(stream, "missing date"); }
+                    if (request.Date is not null) 
+                    {
+                        
+                    }
 
                 }
             }

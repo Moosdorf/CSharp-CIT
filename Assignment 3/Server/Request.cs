@@ -11,5 +11,13 @@ public class Request
     public string Path { get; set; }
     public string Date { get; set; }
     public string Body { get; set; }
+
+    public override string? ToString()
+    {
+        return "request : m " + Method 
+                        + "p " + Path
+                        + "d " + Date
+                        + "b " + Body;
+    }
 }
 
