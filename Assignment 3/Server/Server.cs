@@ -28,7 +28,8 @@ public class Server
             var clinet = server.AcceptTcpClient();
             Console.WriteLine("Client connected.");
 
-            HandleClient(clinet);
+            Task.Run(() => HandleClient(clinet)); // run a task, will handle the client
+            // instead of running the task directly, it starts a new thread to run clients
 
 
         }

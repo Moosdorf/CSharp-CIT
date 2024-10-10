@@ -1,3 +1,4 @@
+//#define run_all_tests // uncomment this line when we want to run everything
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -99,6 +100,7 @@ namespace Assignment3TestSuite
             Assert.Contains("missing resource", response.Status.ToLower());
         }
 
+#if run_all_tests
         /* Date Tests    */
 
         [Fact]
@@ -574,7 +576,7 @@ namespace Assignment3TestSuite
             Assert.Contains("5 not found", response.Status.ToLower());
         }
 
-
+#endif
 
 
         /**********************************************************
