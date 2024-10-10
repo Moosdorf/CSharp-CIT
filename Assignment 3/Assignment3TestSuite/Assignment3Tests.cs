@@ -64,7 +64,7 @@ namespace Assignment3TestSuite
 
             var request = new
             {
-                Method = "xxxx",
+                Method = "xxxx", // not valid
                 Path = "testing",
                 Date = UnixTimestamp(),
                 Body = "{}"
@@ -637,9 +637,9 @@ namespace Assignment3TestSuite
                 } while (bytesread == 2048);
                 
                 var responseData = Encoding.UTF8.GetString(memStream.ToArray());
-                return JsonSerializer.Deserialize<Response>(responseData);
+                //return JsonSerializer.Deserialize<Response>(responseData);
                 // if the naming policy is used you need to do the same on the server side
-                //return JsonSerializer.Deserialize<Response>(responseData, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase});
+                return JsonSerializer.Deserialize<Response>(responseData, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase});
             }
         }
     }
