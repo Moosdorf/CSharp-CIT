@@ -133,7 +133,7 @@ namespace Assignment3TestSuite
 
             Assert.Contains("illegal date", response.Status.ToLower());
         }
-#if run_all_tests
+
         /* Body Tests    */
 
         [Theory]
@@ -157,7 +157,7 @@ namespace Assignment3TestSuite
             Assert.Contains("missing body", response.Status.ToLower());
         }
 
-        
+
         [Fact]
         public void Constraint_RequestUpdateWithoutJsonBody_IllegalBodyError()
         {
@@ -267,7 +267,7 @@ namespace Assignment3TestSuite
 
             Assert.Equal(expectedResponse.ToJson().ToLower(), response.ToJson().ToLower());
         }
-
+#if running
         [Fact]
         public void Constraint_UpdateWithOutPathId_StatusBadRequest()
         {
