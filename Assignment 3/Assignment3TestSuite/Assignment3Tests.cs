@@ -523,7 +523,6 @@ namespace Assignment3TestSuite
             client.ReadResponse();
         }
 
-#if running
 
         /* Delete Tests  */
 
@@ -557,6 +556,7 @@ namespace Assignment3TestSuite
             Assert.Contains("1 ok", response.Status.ToLower());
         }
 
+
         [Fact]
         public void Request_DeleteCategoryWithInvalidId_StatusNotFound()
         {
@@ -573,8 +573,6 @@ namespace Assignment3TestSuite
 
             Assert.Contains("5 not found", response.Status.ToLower());
         }
-
-#endif
 
 
         /**********************************************************

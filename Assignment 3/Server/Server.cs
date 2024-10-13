@@ -114,16 +114,26 @@ public class Server
             int path = update_categories[0].Id;
             Console.WriteLine("go update");
 
-            categories[path] = CreateCategoryFromRequest(request);
-            SendResponse(stream, "3 Updated", null); // update not made
 
-            foreach(var category in categories) { Console.WriteLine(category); }
+            try
+            {
+                categories[path] = CreateCategoryFromRequest(request);
+                SendResponse(stream, "3 Updated", null); // update made
+            }
+            catch
+            {
+                SendResponse(stream, "4 illegal body", null);
+            }
+
+
+
+
+            foreach (var category in categories) { Console.WriteLine(category); }
         } else if (update_categories.Count > 1) 
         {
             SendResponse(stream, "4 Bad Request", null); // update not made
-        }
+        } 
 
-            // SendResponse(stream, "4 illegal body", null); // maybe use?
     }
     private void HandleDelete(NetworkStream stream, Request request)
     {
@@ -131,7 +141,13 @@ public class Server
 
         if (delete_category.Count == 1)
         {
-            Console.WriteLine("go delete");
+            if (categories.Remove(delete_category[0].Id))
+            {
+                SendResponse(stream, "1 Ok", null);
+            } else
+            {
+                SendResponse(stream, "5 Not Found", null);
+            }
         }
         else if (delete_category.Count > 1)
         {
@@ -145,13 +161,12 @@ public class Server
         int new_path = default;
         try
         {
-            new_path = Int32.Parse(splitPath[^1]);
-        } catch
-        {
+            new_path = Int32.Parse(splitPath[^1]); // cannot create new object on already existing
             SendResponse(stream, "4 Bad Request", null);
-        }
+            return;
+        } catch {}
 
-        if (new_path != 0)
+        if (new_path == 0)
         {
             Category new_category = CreateCategoryFromRequest(request);
 
@@ -161,8 +176,12 @@ public class Server
             }
             else
             {
-                Console.WriteLine("category ok");
+                new_path = categories.Count + 1;
+                new_category.Id = new_path;
+
+                categories.Add(new_path, new_category);
                 Console.WriteLine("go create");
+                SendResponse(stream, "2 Created", ToJson(new_category));
             }
         }
 
@@ -357,6 +376,10 @@ public class Server
     public static string ToJson(Response response)
     {
         return JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    }
+    public static string ToJson(Category category)
+    {
+        return JsonSerializer.Serialize(category, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     }
     public static Request? FromJson(string element)
     {
