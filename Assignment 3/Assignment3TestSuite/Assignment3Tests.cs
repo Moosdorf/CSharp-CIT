@@ -342,7 +342,6 @@ namespace Assignment3TestSuite
 
             Assert.Equal(expectedResponse.ToJson(), response.ToJson());
         }
-#if running
         [Fact]
         public void Request_ReadCategoryWithValidId_StatusOkAndCategoryInBody()
         {
@@ -363,9 +362,9 @@ namespace Assignment3TestSuite
                 Status = "1 Ok",
                 Body = (new { cid = 1, name = "Beverages" }.ToJson())
             };
-
             Assert.Equal(expectedResponse.ToJson(), response.ToJson());
         }
+
 
         [Fact]
         public void Request_ReadCategoryWithInvalidId_StatusNotFound()
@@ -384,7 +383,6 @@ namespace Assignment3TestSuite
 
             Assert.Contains("5 not found", response.Status.ToLower());
         }
-
 
         /* Update tests  */
 
@@ -468,6 +466,7 @@ namespace Assignment3TestSuite
             client.ReadResponse();
         }
 
+
         [Fact]
         public void Request_UpdateCategotyInvalidId_NotFound()
         {
@@ -486,7 +485,6 @@ namespace Assignment3TestSuite
 
             Assert.Contains("5 not found", response.Status.ToLower());
         }
-
 
         /* Create Tests  */
 
@@ -525,6 +523,7 @@ namespace Assignment3TestSuite
             client.ReadResponse();
         }
 
+#if running
 
         /* Delete Tests  */
 

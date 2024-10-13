@@ -19,34 +19,36 @@ public class Category
 
     public override string? ToString()
     {
-        return "NAME:" + Name + "ID" + Id;
+        return "NAME: " + Name + " ID: " + Id;
     }
 }
 
 public class Server
 {
     private readonly int _port;
-    private static Dictionary<string, Category> categories = new Dictionary<string, Category>();
+    private Dictionary<int, Category> categories;
     const string validPath = "/api/categories";
-    public Server(int port)
-    {
-        _port = port;
-    }
+    public Server(int port){ _port = port; }
     public void Run()
     {
-        var server = new TcpListener(IPAddress.Loopback, _port);
+    categories = new Dictionary<int, Category>()
+    {
+        { 1, new Category { Id = 1, Name = "Beverages"} },
+        { 2, new Category { Id = 2, Name = "Condiments"} },
+        { 3, new Category { Id = 3, Name = "Confections"} }
+    };
+    var server = new TcpListener(IPAddress.Loopback, _port);
         server.Start();
         Console.WriteLine($"Server started on {_port}");
         while (true)
         {
-            var clinet = server.AcceptTcpClient();
+            var client = server.AcceptTcpClient();
             Console.WriteLine("Client connected.");
 
-            Task.Run(() => HandleClient(clinet)); // run a task, will handle the client
+            Task.Run(() => HandleClient(client)); // run a task, will handle the client
             // instead of running the task directly, it starts a new thread to run clients
         }
     }
-
     private void HandleClient(TcpClient client)
     {
         try
@@ -54,11 +56,9 @@ public class Server
             var stream = client.GetStream();
             string msg = ReadFromStream(stream);
             Console.WriteLine($"Message from client: {msg}");
-
             if (msg == "{}")
             {
-                sendResponse(stream, "4 missing method, missing date, missing path, missing body", null);
-
+                SendResponse(stream, "4 missing method, missing date, missing path, missing body", null);
             } else
             {
                 Request request = FromJson(msg);
@@ -67,16 +67,12 @@ public class Server
                 {
                     // handle that
                 }
-
                 // if illegal method, send appropriate response
                 HandleRequest(stream, request);
-
             }
-
         }
         catch { }
     }
-
     private void HandleRequest(NetworkStream stream, Request request)
     {
         // few checks if we have everything we need to proceed
@@ -85,26 +81,7 @@ public class Server
             switch (request.Method)
             {
                 case "create":
-                    int[] path_categories = pathIsOK(stream, request);
-
-                    if (path_categories is not null & path_categories.Length == 1)
-                    {
-                        Category new_category = createCategory(path_categories[0], request);
-
-                        if (new_category.Name.Equals("") | new_category.Name is null)
-                        {
-                            sendResponse(stream, "4 Bad Request", null);
-
-                        } else
-                        {
-                            Console.WriteLine("category ok");
-                            Console.WriteLine("go create");
-                        }
-                    } else
-                    {
-                        sendResponse(stream, "4 Bad Request", null);
-                    }
-                    
+                    HandleCreate(stream, request);
                     break;
 
                 case "read":
@@ -113,100 +90,157 @@ public class Server
 
                 case "echo":
                     // send the message back to user and status is 1 Ok, this request has been fulfilled
-                    sendResponse(stream, "1 Ok", request.Body);
+                    SendResponse(stream, "1 Ok", request.Body);
                     Console.WriteLine("go echo");
                     break;
 
                 case "delete":
-                    var delete_category = pathIsOK(stream, request);
-
-                    if (delete_category.Length == 1)
-                    {
-                        Console.WriteLine("go delete");
-                    } else
-                    {
-                        sendResponse(stream, "4 Bad Request", null); // delete illegal
-                    }
-
+                    HandleDelete(stream, request);
                     break;
 
                 case "update":
-                    Console.WriteLine("go update");
-                    Category category;
-                    Request result;
-                    try 
-                    {
-                        var update_categories = pathIsOK(stream, request);
-                        if (update_categories.Length == 1)
-                        {
-                            result = FromJson(request.Body);
-                            sendResponse(stream, "3 Updated", null); // update not made
-                        }
-                        else 
-                        {
-                            sendResponse(stream, "4 Bad Request", null); // update illegal
-                        }
+                    HandleUpdate(stream, request);
+                    return;
+            }
+        }
+    }
+    private void HandleUpdate(NetworkStream stream, Request request)
+    {
+        Request result;
 
+        var update_categories = GetRequestedCategories(stream, request);
+        if (update_categories.Count == 1)
+        {
+            int path = update_categories[0].Id;
+            Console.WriteLine("go update");
 
+            categories[path] = CreateCategoryFromRequest(request);
+            SendResponse(stream, "3 Updated", null); // update not made
 
-                        break;
-                    } 
-                    catch 
-                    {
-                        sendResponse(stream, "4 illegal body", null); // update illegal
-                        break;
-                    }
-  
+            foreach(var category in categories) { Console.WriteLine(category); }
+        } else if (update_categories.Count > 1) 
+        {
+            SendResponse(stream, "4 Bad Request", null); // update not made
+        }
+
+            // SendResponse(stream, "4 illegal body", null); // maybe use?
+    }
+    private void HandleDelete(NetworkStream stream, Request request)
+    {
+        var delete_category = GetRequestedCategories(stream, request);
+
+        if (delete_category.Count == 1)
+        {
+            Console.WriteLine("go delete");
+        }
+        else if (delete_category.Count > 1)
+        {
+            SendResponse(stream, "4 Bad Request", null); // cannot delete more than one
+        }
+
+    }
+    private void HandleCreate(NetworkStream stream, Request request)
+    {
+        var splitPath = request.Path.Split('/');
+        int new_path = default;
+        try
+        {
+            new_path = Int32.Parse(splitPath[^1]);
+        } catch
+        {
+            SendResponse(stream, "4 Bad Request", null);
+        }
+
+        if (new_path != 0)
+        {
+            Category new_category = CreateCategoryFromRequest(request);
+
+            if (new_category.Name.Equals("") | new_category.Name is null)
+            {
+                SendResponse(stream, "4 Bad Request", null);
+            }
+            else
+            {
+                Console.WriteLine("category ok");
+                Console.WriteLine("go create");
             }
         }
 
     }
-
-    private Category createCategory(int index, Request request)
+    private Category CreateCategoryFromRequest(Request request)
     {
-        Category newCategory = JsonSerializer.Deserialize<Category>(request.Body);
-        return newCategory;
+        return JsonSerializer.Deserialize<Category>(request.Body); // create a new category from request
     }
-
-    private int[] pathIsOK(NetworkStream stream, Request request)
+    private List<Category> GetRequestedCategories(NetworkStream stream, Request request)
     {
+        List<Category> readCategories = new List<Category>();
+        List<int> paths = new List<int>();
+
         if (request.Path == validPath) // do all
         {
-            return new int[] { 1, 2, 3 }; // FAKE NUMBERS REPLACE WITH REAL IMPLEMENTATION
-            // return all numbers
+            foreach (int key in categories.Keys) 
+            { 
+                paths.Add(key);
+                Console.WriteLine(key);
+            }
         }
         else // check which category and if it exists
         {
-            string lastCharacter = request.Path[^1].ToString();
+            string[] splitPath = request.Path.Split('/');
+            foreach (string s in splitPath) { Console.WriteLine("SPLIT!: " + s); }
             try
             {
-                int categoryNum = Int32.Parse(lastCharacter);
+                int categoryNum = Int32.Parse(splitPath[^1]);
                 // the index might not exist
-                return new int[] { categoryNum };
+                paths.Add(categoryNum);
             }
-            catch // if not an int, its no good
-            {
-                sendResponse(stream, "4 Bad Request", null);
-            }
+            catch {
+                SendResponse(stream, "4 Bad Request", null);
+                return null;
+            } // if not an int, its no good
+
         }
 
-        return null;
+        foreach (int path in paths)
+        {
+            if (categories.ContainsKey(path))
+            {
+                readCategories.Add(categories[path]);
+            }
+            else
+            {
+                SendResponse(stream, "5 Not Found", null);
+                return null;
+            }
+        }
+        return readCategories;
     }
-
     private void HandleRead(NetworkStream stream, Request request)
     {
-        
-        if (pathIsOK(stream, request) is not null)
+        var readPaths = GetRequestedCategories(stream, request);
+        if (readPaths is not null)
         {
+            Console.WriteLine("READ THESE");
 
-        }
-        else
-        {
-            sendResponse(stream, "4 Bad Request", null);
 
+
+            string responseBody = null;
+            // check if categories count is more than one, then return list of categories
+            if (readPaths.Count > 1)
+            {
+                responseBody = JsonSerializer.Serialize(readPaths, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            } else if (readPaths.Count == 1) // if only one, then return that not in a list
+            {
+                responseBody = JsonSerializer.Serialize(readPaths[0], new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }
+
+
+
+            SendResponse(stream, "1 Ok", responseBody);
         }
+
     }
-
     private bool IsRequestOK(NetworkStream stream, Request request)
     {
         // “create”, “read”, “update”, “delete”, “echo”
@@ -216,18 +250,13 @@ public class Server
         string response = "";
         string method = null;
 
-        // check if path is missing
-        if (request.Path is null) 
-        {
-            Console.WriteLine("no path");
-            response += "missing path, ";
-        }
+
 
         // check if date is ok
         if (request.Date is null)
         {
             Console.WriteLine("no date");
-            response += "missing date, ";
+            response += "missing resource date, ";
             // missing date
         }
         else
@@ -236,8 +265,7 @@ public class Server
             if (!CheckDate(stream, request)) 
             {
                 Console.WriteLine("date wrong");
-                sendResponse(stream, "4 illegal date", null);
-                return false;
+                response += "illegal date, ";
             }
 
         }
@@ -255,13 +283,21 @@ public class Server
             method = request.Method;
         }
 
+        // check if path is missing
+        if (request.Path is null & method != "echo")
+        {
+            Console.WriteLine("no path");
+            response += "missing resource path, ";
+        }
+
         // body can be null with certain methods (read or delete)
-        if (request.Body is null & bodyNullMethods.Contains(method)) 
+        if (response == "" & request.Body is null & bodyNullMethods.Contains(method)) 
         {
             return true;
 
         } else if (request.Body is null & !bodyNullMethods.Contains(method))
         {
+
             // missing body
             Console.WriteLine("missing body");
             response += "missing body, ";
@@ -272,13 +308,12 @@ public class Server
         {
             response = response.Remove(response.Length - 2);
             response = "4 " + response;
-            sendResponse(stream, response, null);
+            SendResponse(stream, response, null);
             return false;
         }
 
         return true;
     }
-
     private bool CheckDate(NetworkStream stream, Request request)
     {
         try
@@ -294,8 +329,7 @@ public class Server
             return false;
         }
     }
-
-    private void sendResponse(NetworkStream stream, string status, string body)
+    private void SendResponse(NetworkStream stream, string status, string body)
     {
         Response response = new Response
         {
@@ -308,21 +342,18 @@ public class Server
         Console.WriteLine(json);
         WriteToStream(stream, json);
     }
-
     private string ReadFromStream(NetworkStream stream)
     {
         var buffer = new byte[1024];
         var readCount = stream.Read(buffer);
         return Encoding.UTF8.GetString(buffer, 0, readCount); // only read the bytes that are used. 
     }
-
     private void WriteToStream(NetworkStream stream, string msg)
     {
         var buffer = Encoding.UTF8.GetBytes(msg);
         stream.Write(buffer);
 
     }
-
     public static string ToJson(Response response)
     {
         return JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
@@ -332,5 +363,3 @@ public class Server
         return JsonSerializer.Deserialize<Request>(element, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     }
 }
-
-
