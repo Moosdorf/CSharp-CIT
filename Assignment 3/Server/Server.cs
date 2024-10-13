@@ -62,6 +62,8 @@ public class Server
             
         }
     }
+
+    // handles the client request
     private void HandleClient(TcpClient client)
     {
         try
@@ -123,6 +125,89 @@ public class Server
             }
         }
     }
+
+    // checks if request is ok, if yes then we proceed to the methods (can still fail later if bad request or not found)
+    private bool IsRequestOK(NetworkStream stream, Request request)
+    {
+        // “create”, “read”, “update”, “delete”, “echo”
+        var validMethods = new string[] { "create", "read", "update", "delete", "echo" };
+        var bodyNullMethods = new string[] { "read", "delete" };
+
+        string response = "";
+        string method = null;
+
+
+
+        // check if date is ok
+        if (request.Date is null)
+        {
+            Console.WriteLine("no date");
+            response += "missing resource date, ";
+            // missing date
+        }
+        else
+        {
+            // check if date format is ok
+            if (!CheckDate(stream, request))
+            {
+                Console.WriteLine("date wrong");
+                response += "illegal date, ";
+            }
+
+        }
+
+        // check if correct method 
+        if (!validMethods.Contains(request.Method))
+        {
+            Console.WriteLine("illegal method");
+            response += "illegal method, ";
+            // no method that matches
+        }
+        else // assign method when it's legal
+        {
+            Console.WriteLine("method ok");
+            method = request.Method;
+        }
+
+        // check if path is missing
+        if (request.Path is null & method != "echo")
+        {
+            Console.WriteLine("no path");
+            response += "missing resource path, ";
+        }
+
+        // body can be null with certain methods (read or delete)
+        if (response == "" & request.Body is null & bodyNullMethods.Contains(method))
+        {
+            Console.WriteLine("body null but ok");
+            return true;
+
+        }
+        else if (request.Body is null & !bodyNullMethods.Contains(method))
+        {
+
+            // missing body
+            Console.WriteLine("missing body");
+            response += "missing body, ";
+        }
+        else
+        {
+            Console.WriteLine("Body ok");
+        }
+
+
+        if (response != "")
+        {
+            response = response.Remove(response.Length - 2);
+            response = "4 " + response;
+            SendResponse(stream, response, null);
+            return false;
+        }
+
+        return true;
+    }
+
+    // all methods except echo
     private void HandleCreate(NetworkStream stream, Request request)
     {
         // checking if the path has a specific index (it should not have one)
@@ -242,6 +327,38 @@ public class Server
             SendResponse(stream, "4 Bad Request", null); // update not made
         }
     }
+
+    // checks if request has been made within 24 hours (subject to change)
+    private bool CheckDate(NetworkStream stream, Request request)
+    {
+        var twentyFourHours = 24 * 60 * 60;
+        var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+        try
+        {
+            // if date can be passed to int, then it might be in unix
+            var clientRequestDate = Int32.Parse(request.Date); // client request time
+
+            // check if the request has happened in the last 24 hrs (subject to change)
+            if (clientRequestDate > (now - twentyFourHours) & clientRequestDate <= now)
+
+            {
+                Console.WriteLine("date ok");
+                return true;
+            }
+            else // too old request, or invalid date (date not legal)
+            {
+                return false;
+            }
+
+        }
+        catch
+        {
+            // date is not legal
+            return false;
+        }
+    }
+
+    // get or create category
     private Category CreateCategoryFromRequest(Request request)
     {
         return JsonSerializer.Deserialize<Category>(request.Body); // create a new category from request
@@ -300,110 +417,8 @@ public class Server
         }
         return readCategories;
     }
-    private bool IsRequestOK(NetworkStream stream, Request request)
-    {
-        // “create”, “read”, “update”, “delete”, “echo”
-        var validMethods = new string[] { "create", "read", "update", "delete", "echo" };
-        var bodyNullMethods = new string[] { "read", "delete" };
-
-        string response = "";
-        string method = null;
-
-
-
-        // check if date is ok
-        if (request.Date is null)
-        {
-            Console.WriteLine("no date");
-            response += "missing resource date, ";
-            // missing date
-        }
-        else
-        {
-            // check if date format is ok
-            if (!CheckDate(stream, request)) 
-            {
-                Console.WriteLine("date wrong");
-                response += "illegal date, ";
-            }
-
-        }
-
-        // check if correct method 
-        if (!validMethods.Contains(request.Method)) 
-        {
-            Console.WriteLine("illegal method");
-            response += "illegal method, ";
-            // no method that matches
-        }
-        else // assign method when it's legal
-        {
-            Console.WriteLine("method ok");
-            method = request.Method;
-        }
-
-        // check if path is missing
-        if (request.Path is null & method != "echo")
-        {
-            Console.WriteLine("no path");
-            response += "missing resource path, ";
-        }
-
-        // body can be null with certain methods (read or delete)
-        if (response == "" & request.Body is null & bodyNullMethods.Contains(method)) 
-        {
-            Console.WriteLine("body null but ok");
-            return true;
-
-        } else if (request.Body is null & !bodyNullMethods.Contains(method))
-        {
-
-            // missing body
-            Console.WriteLine("missing body");
-            response += "missing body, ";
-        } else
-        {
-            Console.WriteLine("Body ok");
-        }
-
-
-        if (response != "")
-        {
-            response = response.Remove(response.Length - 2);
-            response = "4 " + response;
-            SendResponse(stream, response, null);
-            return false;
-        }
-
-        return true;
-    }
-    private bool CheckDate(NetworkStream stream, Request request)
-    {
-        var twentyFourHours = 24 * 60 * 60;
-        var now = DateTimeOffset.Now.ToUnixTimeSeconds(); 
-        try
-        {
-            // if date can be passed to int, then it might be in unix
-            var clientRequestDate = Int32.Parse(request.Date); // client request time
-
-            // check if the request has happened in the last 24 hrs (subject to change)
-            if (clientRequestDate > (now - twentyFourHours) & clientRequestDate <= now)
-
-            {
-                Console.WriteLine("date ok");
-                return true;
-            } else // too old request, or invalid date (date not legal)
-            {
-                return false;
-            }
-
-        }
-        catch
-        {
-            // date is not legal
-            return false;
-        }
-    }
+    
+    // send to or read from client
     private void SendResponse(NetworkStream stream, string status, string body)
     {
         // create the response based on arguments passed
@@ -430,8 +445,9 @@ public class Server
     {
         var buffer = Encoding.UTF8.GetBytes(msg);
         stream.Write(buffer);
-
     }
+
+    // conversion
     public static string ToJson(Response response)
     {
         return JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
