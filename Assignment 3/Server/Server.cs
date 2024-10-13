@@ -25,13 +25,16 @@ public class Category
 
 public class Server
 {
+    // define port, the database and the valid path 
     private readonly int _port;
     private Dictionary<int, Category> categories;
     const string validPath = "/api/categories";
+
+    // constructor
     public Server(int port){ _port = port; }
     public void Run()
     {
-        // fake database, dictionary to keep the categories
+        // fake database initialization, dictionary to keep the categories
         categories = new Dictionary<int, Category>() 
         {
             { 1, new Category { Id = 1, Name = "Beverages"} },
@@ -120,57 +123,10 @@ public class Server
             }
         }
     }
-    private void HandleUpdate(NetworkStream stream, Request request)
-    {
-        // get all categories based on request (should only return one)
-        var update_categories = GetRequestedCategories(stream, request);
-        if (update_categories.Count == 1) // we can only update one item
-        {
-            int path = update_categories[0].Id; // the index for the category is the same as cid
-            try
-            {
-                categories[path] = CreateCategoryFromRequest(request); // try to update the category
-                Console.WriteLine("go update");
-                SendResponse(stream, "3 Updated", null); // update made
-                foreach (var category in categories) { Console.WriteLine(category); } // display in the console the whole updated database
-            }
-            catch // will go into catch is the update cannot be made (illegal body or illegal path)
-            {
-                SendResponse(stream, "4 illegal body", null); // update not made
-            }
-
-        } else // if we get too many categories or none
-        {
-            SendResponse(stream, "4 Bad Request", null); // update not made
-        } 
-    }
-    private void HandleDelete(NetworkStream stream, Request request)
-    {
-        // get all categories to delete (should only be one)
-        var delete_category = GetRequestedCategories(stream, request);
-
-        // if there's only one
-        if (delete_category.Count == 1)
-        {
-            if (categories.Remove(delete_category[0].Id)) // if we can remove it from the database (dictionary)
-            {
-                Console.WriteLine("deleted ok");
-                SendResponse(stream, "1 Ok", null); // has been deleted
-            } else
-            {
-                SendResponse(stream, "5 Not Found", null); // if the path is not ok, then we don't delete it
-            }
-        }
-        else 
-        {
-            SendResponse(stream, "4 Bad Request", null); // cannot delete if more than one category or 0.
-        }
-
-    }
     private void HandleCreate(NetworkStream stream, Request request)
     {
         // checking if the path has a specific index (it should not have one)
-        var splitPath = request.Path.Split('/'); 
+        var splitPath = request.Path.Split('/');
         int new_path = default;
         try
         {
@@ -178,7 +134,8 @@ public class Server
             Console.WriteLine("index should not be specified"); // if index has been found then it's a bad request
             SendResponse(stream, "4 Bad Request", null);
             return;
-        } catch {}
+        }
+        catch { }
 
         if (new_path == 0) // if new_path is still default
         {
@@ -236,6 +193,54 @@ public class Server
             SendResponse(stream, "1 Ok", responseBody);
         }
 
+    }
+    private void HandleDelete(NetworkStream stream, Request request)
+    {
+        // get all categories to delete (should only be one)
+        var delete_category = GetRequestedCategories(stream, request);
+
+        // if there's only one
+        if (delete_category.Count == 1)
+        {
+            if (categories.Remove(delete_category[0].Id)) // if we can remove it from the database (dictionary)
+            {
+                Console.WriteLine("deleted ok");
+                SendResponse(stream, "1 Ok", null); // has been deleted
+            } else
+            {
+                SendResponse(stream, "5 Not Found", null); // if the path is not ok, then we don't delete it
+            }
+        }
+        else 
+        {
+            SendResponse(stream, "4 Bad Request", null); // cannot delete if more than one category or 0.
+        }
+
+    }
+    private void HandleUpdate(NetworkStream stream, Request request)
+    {
+        // get all categories based on request (should only return one)
+        var update_categories = GetRequestedCategories(stream, request);
+        if (update_categories.Count == 1) // we can only update one item
+        {
+            int path = update_categories[0].Id; // the index for the category is the same as cid
+            try
+            {
+                categories[path] = CreateCategoryFromRequest(request); // try to update the category
+                Console.WriteLine("go update");
+                SendResponse(stream, "3 Updated", null); // update made
+                foreach (var category in categories) { Console.WriteLine(category); } // display in the console the whole updated database
+            }
+            catch // will go into catch is the update cannot be made (illegal body or illegal path)
+            {
+                SendResponse(stream, "4 illegal body", null); // update not made
+            }
+
+        }
+        else // if we get too many categories or none
+        {
+            SendResponse(stream, "4 Bad Request", null); // update not made
+        }
     }
     private Category CreateCategoryFromRequest(Request request)
     {
@@ -295,7 +300,6 @@ public class Server
         }
         return readCategories;
     }
-
     private bool IsRequestOK(NetworkStream stream, Request request)
     {
         // “create”, “read”, “update”, “delete”, “echo”
