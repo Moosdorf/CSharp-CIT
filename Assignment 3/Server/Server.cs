@@ -17,7 +17,7 @@ public class Category
     [JsonPropertyName("name")]
     public string Name { get; set; }
 
-    public override string? ToString()
+    public override string? ToString() // to display the category in console
     {
         return "NAME: " + Name + " ID: " + Id;
     }
@@ -31,43 +31,58 @@ public class Server
     public Server(int port){ _port = port; }
     public void Run()
     {
-    categories = new Dictionary<int, Category>()
-    {
-        { 1, new Category { Id = 1, Name = "Beverages"} },
-        { 2, new Category { Id = 2, Name = "Condiments"} },
-        { 3, new Category { Id = 3, Name = "Confections"} }
-    };
-    var server = new TcpListener(IPAddress.Loopback, _port);
+        // fake database, dictionary to keep the categories
+        categories = new Dictionary<int, Category>() 
+        {
+            { 1, new Category { Id = 1, Name = "Beverages"} },
+            { 2, new Category { Id = 2, Name = "Condiments"} },
+            { 3, new Category { Id = 3, Name = "Confections"} }
+        }; 
+
+        // connect and start server
+        var server = new TcpListener(IPAddress.Loopback, _port);
         server.Start();
         Console.WriteLine($"Server started on {_port}");
+
+        // count for clients
+        int clientCount = 0;
+
         while (true)
         {
-            var client = server.AcceptTcpClient();
-            Console.WriteLine("Client connected.");
+            // wait for client
+            var client = server.AcceptTcpClient(); 
+            clientCount++; // when client has connected
+            Console.WriteLine("Client connected, count: " + clientCount);
 
-            Task.Run(() => HandleClient(client)); // run a task, will handle the client
-            // instead of running the task directly, it starts a new thread to run clients
+            // start a new thread to handle this client
+            Task.Run(() => HandleClient(client)); 
+            
         }
     }
     private void HandleClient(TcpClient client)
     {
         try
         {
+            Console.WriteLine("Handle client:");
+
+            // get and read message from client
             var stream = client.GetStream();
             string msg = ReadFromStream(stream);
             Console.WriteLine($"Message from client: {msg}");
-            if (msg == "{}")
+
+            if (msg == "{}") // if empty msg, send respone
             {
                 SendResponse(stream, "4 missing method, missing date, missing path, missing body", null);
             } else
             {
+                // try to obtain request from json
                 Request request = FromJson(msg);
-                Console.WriteLine(request.ToString());
-                if (request == null)
+
+                if (request == null) // if request is null something went wrong
                 {
-                    // handle that
+                    SendResponse(stream, "6 Error", null);
                 }
-                // if illegal method, send appropriate response
+
                 HandleRequest(stream, request);
             }
         }
@@ -78,6 +93,7 @@ public class Server
         // few checks if we have everything we need to proceed
         if (IsRequestOK(stream, request))
         {
+            // if request is ok, then we can proceed with the methods
             switch (request.Method)
             {
                 case "create":
@@ -90,8 +106,8 @@ public class Server
 
                 case "echo":
                     // send the message back to user and status is 1 Ok, this request has been fulfilled
-                    SendResponse(stream, "1 Ok", request.Body);
                     Console.WriteLine("go echo");
+                    SendResponse(stream, "1 Ok", request.Body);
                     break;
 
                 case "delete":
@@ -106,83 +122,118 @@ public class Server
     }
     private void HandleUpdate(NetworkStream stream, Request request)
     {
-        Request result;
-
+        // get all categories based on request (should only return one)
         var update_categories = GetRequestedCategories(stream, request);
-        if (update_categories.Count == 1)
+        if (update_categories.Count == 1) // we can only update one item
         {
-            int path = update_categories[0].Id;
-            Console.WriteLine("go update");
-
-
+            int path = update_categories[0].Id; // the index for the category is the same as cid
             try
             {
-                categories[path] = CreateCategoryFromRequest(request);
+                categories[path] = CreateCategoryFromRequest(request); // try to update the category
+                Console.WriteLine("go update");
                 SendResponse(stream, "3 Updated", null); // update made
+                foreach (var category in categories) { Console.WriteLine(category); } // display in the console the whole updated database
             }
-            catch
+            catch // will go into catch is the update cannot be made (illegal body or illegal path)
             {
-                SendResponse(stream, "4 illegal body", null);
+                SendResponse(stream, "4 illegal body", null); // update not made
             }
 
-
-
-
-            foreach (var category in categories) { Console.WriteLine(category); }
-        } else if (update_categories.Count > 1) 
+        } else // if we get too many categories or none
         {
             SendResponse(stream, "4 Bad Request", null); // update not made
         } 
-
     }
     private void HandleDelete(NetworkStream stream, Request request)
     {
+        // get all categories to delete (should only be one)
         var delete_category = GetRequestedCategories(stream, request);
 
+        // if there's only one
         if (delete_category.Count == 1)
         {
-            if (categories.Remove(delete_category[0].Id))
+            if (categories.Remove(delete_category[0].Id)) // if we can remove it from the database (dictionary)
             {
-                SendResponse(stream, "1 Ok", null);
+                Console.WriteLine("deleted ok");
+                SendResponse(stream, "1 Ok", null); // has been deleted
             } else
             {
-                SendResponse(stream, "5 Not Found", null);
+                SendResponse(stream, "5 Not Found", null); // if the path is not ok, then we don't delete it
             }
         }
-        else if (delete_category.Count > 1)
+        else 
         {
-            SendResponse(stream, "4 Bad Request", null); // cannot delete more than one
+            SendResponse(stream, "4 Bad Request", null); // cannot delete if more than one category or 0.
         }
 
     }
     private void HandleCreate(NetworkStream stream, Request request)
     {
-        var splitPath = request.Path.Split('/');
+        // checking if the path has a specific index (it should not have one)
+        var splitPath = request.Path.Split('/'); 
         int new_path = default;
         try
         {
             new_path = Int32.Parse(splitPath[^1]); // cannot create new object on already existing
+            Console.WriteLine("index should not be specified"); // if index has been found then it's a bad request
             SendResponse(stream, "4 Bad Request", null);
             return;
         } catch {}
 
-        if (new_path == 0)
+        if (new_path == 0) // if new_path is still default
         {
+            // create new category based on the request
             Category new_category = CreateCategoryFromRequest(request);
 
+            // if the name is null or empty then it's a bad request
             if (new_category.Name.Equals("") | new_category.Name is null)
             {
+                Console.WriteLine("no name of category");
                 SendResponse(stream, "4 Bad Request", null);
+
             }
             else
             {
+                // find new cid for the new category
                 new_path = categories.Count + 1;
+
+                // set the id, it was not initialized with one
                 new_category.Id = new_path;
 
+                // add the category to the database (dictionary)
                 categories.Add(new_path, new_category);
-                Console.WriteLine("go create");
+                Console.WriteLine("go create category");
                 SendResponse(stream, "2 Created", ToJson(new_category));
             }
+        }
+
+    }
+    private void HandleRead(NetworkStream stream, Request request)
+    {
+        // get all categories the client want to read
+        var readPaths = GetRequestedCategories(stream, request);
+        if (readPaths is not null)
+        {
+            string responseBody = null;
+            // check if categories count is more than one, then return list of categories
+            if (readPaths.Count > 1)
+            {
+                responseBody = JsonSerializer.Serialize(readPaths, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            }
+            else if (readPaths.Count == 1) // if only one, then return that not in a list
+            {
+                responseBody = JsonSerializer.Serialize(readPaths[0], new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }
+            else
+            { // if no categories
+                SendResponse(stream, "5 Not Found", null);
+                return;
+            }
+
+
+            // send response to client with the categories
+            SendResponse(stream, "1 Ok", responseBody);
         }
 
     }
@@ -192,74 +243,59 @@ public class Server
     }
     private List<Category> GetRequestedCategories(NetworkStream stream, Request request)
     {
-        List<Category> readCategories = new List<Category>();
-        List<int> paths = new List<int>();
+        // get all categories based on request
 
+        // initialize list to keep the paths and one for the categories we are fetching
+        List<int> paths = new List<int>();
+        List<Category> readCategories = new List<Category>();
+
+        // if the path is exactly our validPath, then we must return all the categories
         if (request.Path == validPath) // do all
         {
-            foreach (int key in categories.Keys) 
+            foreach (int key in categories.Keys) // add all keys
             { 
                 paths.Add(key);
-                Console.WriteLine(key);
             }
         }
-        else // check which category and if it exists
+        else if (request.Path.Contains(validPath)) // check which category and if it exists (must be  l)
         {
-            string[] splitPath = request.Path.Split('/');
-            foreach (string s in splitPath) { Console.WriteLine("SPLIT!: " + s); }
+            string[] splitPath = request.Path.Split('/'); // split the path
+            Console.WriteLine("Try to parse: " + splitPath[^1]); // we only care about the last bit, it's the index
             try
             {
+                // try to parse the number (if it is a number)
                 int categoryNum = Int32.Parse(splitPath[^1]);
                 // the index might not exist
                 paths.Add(categoryNum);
             }
-            catch {
+            catch // if not an int, it's no good
+            {
+                
                 SendResponse(stream, "4 Bad Request", null);
                 return null;
-            } // if not an int, its no good
+            } 
 
+        } else // if the path is incorrect it's a bad request. Must contain the validPath ("api/categories").
+        {
+            SendResponse(stream, "4 Bad Request", null);
+            return null;
         }
 
-        foreach (int path in paths)
+        foreach (int path in paths) // insert all the categories based on the paths found
         {
             if (categories.ContainsKey(path))
             {
                 readCategories.Add(categories[path]);
             }
             else
-            {
+            { // if key does not match any in the database
                 SendResponse(stream, "5 Not Found", null);
                 return null;
             }
         }
         return readCategories;
     }
-    private void HandleRead(NetworkStream stream, Request request)
-    {
-        var readPaths = GetRequestedCategories(stream, request);
-        if (readPaths is not null)
-        {
-            Console.WriteLine("READ THESE");
 
-
-
-            string responseBody = null;
-            // check if categories count is more than one, then return list of categories
-            if (readPaths.Count > 1)
-            {
-                responseBody = JsonSerializer.Serialize(readPaths, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-
-            } else if (readPaths.Count == 1) // if only one, then return that not in a list
-            {
-                responseBody = JsonSerializer.Serialize(readPaths[0], new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            }
-
-
-
-            SendResponse(stream, "1 Ok", responseBody);
-        }
-
-    }
     private bool IsRequestOK(NetworkStream stream, Request request)
     {
         // “create”, “read”, “update”, “delete”, “echo”
@@ -312,6 +348,7 @@ public class Server
         // body can be null with certain methods (read or delete)
         if (response == "" & request.Body is null & bodyNullMethods.Contains(method)) 
         {
+            Console.WriteLine("body null but ok");
             return true;
 
         } else if (request.Body is null & !bodyNullMethods.Contains(method))
@@ -320,7 +357,10 @@ public class Server
             // missing body
             Console.WriteLine("missing body");
             response += "missing body, ";
-        } 
+        } else
+        {
+            Console.WriteLine("Body ok");
+        }
 
 
         if (response != "")
@@ -335,12 +375,24 @@ public class Server
     }
     private bool CheckDate(NetworkStream stream, Request request)
     {
+        var twentyFourHours = 24 * 60 * 60;
+        var now = DateTimeOffset.Now.ToUnixTimeSeconds(); 
         try
         {
-            // date can be passed to int
-            Int32.Parse(request.Date);
-            Console.WriteLine("date ok");
-            return true;
+            // if date can be passed to int, then it might be in unix
+            var clientRequestDate = Int32.Parse(request.Date); // client request time
+
+            // check if the request has happened in the last 24 hrs (subject to change)
+            if (clientRequestDate > (now - twentyFourHours) & clientRequestDate <= now)
+
+            {
+                Console.WriteLine("date ok");
+                return true;
+            } else // too old request, or invalid date (date not legal)
+            {
+                return false;
+            }
+
         }
         catch
         {
@@ -350,15 +402,18 @@ public class Server
     }
     private void SendResponse(NetworkStream stream, string status, string body)
     {
+        // create the response based on arguments passed
         Response response = new Response
         {
             Status = status, 
             Body = body
         };
-        
 
+        // convert the response to json
         var json = ToJson(response);
-        Console.WriteLine(json);
+        Console.WriteLine("Response: " + json);
+
+        // and send the response to the client
         WriteToStream(stream, json);
     }
     private string ReadFromStream(NetworkStream stream)
