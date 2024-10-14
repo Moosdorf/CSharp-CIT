@@ -16,10 +16,9 @@ public class Category
     public int Id { get; set; }
     [JsonPropertyName("name")]
     public string Name { get; set; }
-
     public override string? ToString() // to display the category in console
     {
-        return "NAME: " + Name + " ID: " + Id;
+        return "Category name: " + Name + " cid: " + Id;
     }
 }
 
@@ -30,8 +29,10 @@ public class Server
     private Dictionary<int, Category> categories;
     const string validPath = "/api/categories";
 
-    // constructor
+    // constructor, set the port the server should run on
     public Server(int port){ _port = port; }
+
+    // start the server and await clients
     public void Run()
     {
         // fake database initialization, dictionary to keep the categories
@@ -55,6 +56,7 @@ public class Server
             // wait for client
             var client = server.AcceptTcpClient(); 
             clientCount++; // when client has connected
+            Console.WriteLine();
             Console.WriteLine("Client connected, count: " + clientCount);
 
             // start a new thread to handle this client
@@ -69,7 +71,6 @@ public class Server
         try
         {
             Console.WriteLine("Handle client:");
-
             // get and read message from client
             var stream = client.GetStream();
             string msg = ReadFromStream(stream);
@@ -127,16 +128,15 @@ public class Server
     }
 
     // checks if request is ok, if yes then we proceed to the methods (can still fail later if bad request or not found)
+    // date method path and body must fullfil certain requirements. e.g. We must always have a correct date. 
     private bool IsRequestOK(NetworkStream stream, Request request)
     {
         // “create”, “read”, “update”, “delete”, “echo”
         var validMethods = new string[] { "create", "read", "update", "delete", "echo" };
         var bodyNullMethods = new string[] { "read", "delete" };
 
-        string response = "";
-        string method = null;
-
-
+        string response = ""; // will be built up throughout the method
+        string method = null; // method will be set if it is valid
 
         // check if date is ok
         if (request.Date is null)
@@ -153,11 +153,10 @@ public class Server
                 Console.WriteLine("date wrong");
                 response += "illegal date, ";
             }
-
         }
 
         // check if correct method 
-        if (!validMethods.Contains(request.Method))
+        if (!validMethods.Contains(request.Method)) 
         {
             Console.WriteLine("illegal method");
             response += "illegal method, ";
@@ -176,30 +175,19 @@ public class Server
             response += "missing resource path, ";
         }
 
-        // body can be null with certain methods (read or delete)
-        if (response == "" & request.Body is null & bodyNullMethods.Contains(method))
+        // if body is null, then the method must be one of two in bodyNullMethods
+        if (request.Body is null & !bodyNullMethods.Contains(method))
         {
-            Console.WriteLine("body null but ok");
-            return true;
-
-        }
-        else if (request.Body is null & !bodyNullMethods.Contains(method))
-        {
-
-            // missing body
+            // we need body for the rest. so return missing body
             Console.WriteLine("missing body");
             response += "missing body, ";
         }
-        else
-        {
-            Console.WriteLine("Body ok");
-        }
 
-
+        // if response is not empty we must return false and send appropriate response. This has been build up throughout the checks
         if (response != "")
         {
-            response = response.Remove(response.Length - 2);
-            response = "4 " + response;
+            response = response.Remove(response.Length - 2); // remove last comma and space from string.
+            response = "4 " + response; // put 4 in front of statement to indicate this is a bad request
             SendResponse(stream, response, null);
             return false;
         }
@@ -207,7 +195,7 @@ public class Server
         return true;
     }
 
-    // all methods except echo
+    // all method logic except echo
     private void HandleCreate(NetworkStream stream, Request request)
     {
         // checking if the path has a specific index (it should not have one)
@@ -340,7 +328,6 @@ public class Server
 
             // check if the request has happened in the last 24 hrs (subject to change)
             if (clientRequestDate > (now - twentyFourHours) & clientRequestDate <= now)
-
             {
                 Console.WriteLine("date ok");
                 return true;
@@ -349,7 +336,6 @@ public class Server
             {
                 return false;
             }
-
         }
         catch
         {
